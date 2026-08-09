@@ -186,11 +186,19 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onStartScan, className }
             <span className="text-ink-400 font-medium">Try Sample:</span>
             <button
               type="button"
-              onClick={() => handlePresetSelect('ai_generated_face_deepfake.jpg', 'image')}
+              onClick={() => handlePresetSelect('deepfake_faceswap_jennifer.jpg', 'image')}
               className="px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-300 hover:bg-rose-500/20 border border-rose-500/20 transition-colors flex items-center gap-1.5 font-medium"
             >
               <ImageIcon className="w-3.5 h-3.5 stroke-[2]" />
-              AI Image (22%)
+              Face Swap Deepfake (16%)
+            </button>
+            <button
+              type="button"
+              onClick={() => handlePresetSelect('authentic_jennifer_lawrence.jpg', 'image')}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors flex items-center gap-1.5 font-medium"
+            >
+              <ImageIcon className="w-3.5 h-3.5 stroke-[2]" />
+              Original Photo (95%)
             </button>
             <button
               type="button"
@@ -207,14 +215,6 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onStartScan, className }
             >
               <ImageIcon className="w-3.5 h-3.5 stroke-[2]" />
               Edited Photo (58%)
-            </button>
-            <button
-              type="button"
-              onClick={() => handlePresetSelect('authentic_camera_raw.jpg', 'image')}
-              className="px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 border border-emerald-500/20 transition-colors flex items-center gap-1.5 font-medium"
-            >
-              <Music className="w-3.5 h-3.5 stroke-[2]" />
-              Real Photo (94%)
             </button>
           </div>
 
