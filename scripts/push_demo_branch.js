@@ -51,6 +51,7 @@ async function main() {
     await stageDir('app');
     await stageDir('components');
     await stageDir('lib');
+    await stageDir('data');
     await stageDir('public');
     await stageDir('scripts');
 

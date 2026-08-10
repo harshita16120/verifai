@@ -66,6 +66,50 @@ export function getVerdict(score: number): VerdictInfo {
   return VERDICT_CONFIG.manipulated;
 }
 
+export interface FusionWeightsConfig {
+  faceForgery: number;
+  frequencyGan: number;
+  audioSpoof: number;
+  exifEla: number;
+  c2pa: number;
+}
+
+export const DEFAULT_FUSION_CONFIG: FusionWeightsConfig = {
+  faceForgery: 0.2,
+  frequencyGan: 0.2,
+  audioSpoof: 0.2,
+  exifEla: 0.2,
+  c2pa: 0.2,
+};
+
+/**
+ * Single source of truth for fusion score calculation from modular breakdown.
+ */
+export function calculateFusedScore(
+  breakdown: {
+    faceForgeryScore: number;
+    frequencyGanScore: number;
+    audioSpoofScore: number;
+    exifElaScore: number;
+    c2paScore: number;
+  },
+  weights: FusionWeightsConfig = DEFAULT_FUSION_CONFIG
+): number {
+  const totalWeight =
+    weights.faceForgery + weights.frequencyGan + weights.audioSpoof + weights.exifEla + weights.c2pa;
+  if (totalWeight === 0) return 50;
+
+  const raw =
+    (breakdown.faceForgeryScore * weights.faceForgery +
+      breakdown.frequencyGanScore * weights.frequencyGan +
+      breakdown.audioSpoofScore * weights.audioSpoof +
+      breakdown.exifElaScore * weights.exifEla +
+      breakdown.c2paScore * weights.c2pa) /
+    totalWeight;
+
+  return Math.round(Math.min(100, Math.max(0, raw)));
+}
+
 export interface ScoringLegendItem {
   range: string;
   category: VerdictCategory;
