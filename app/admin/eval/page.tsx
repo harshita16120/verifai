@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 // ──────────────────────────────────────────────────────────────
 // app/admin/eval/page.tsx — Judged Evaluation & Fusion Tuning UI
 // ──────────────────────────────────────────────────────────────

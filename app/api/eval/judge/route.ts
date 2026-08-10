@@ -2,6 +2,8 @@
 // app/api/eval/judge/route.ts — POST human judgments for eval samples
 // ──────────────────────────────────────────────────────────────
 
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';

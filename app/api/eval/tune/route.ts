@@ -2,6 +2,8 @@
 // app/api/eval/tune/route.ts — POST run tuning pass, PUT apply weights
 // ──────────────────────────────────────────────────────────────
 
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
