@@ -73,6 +73,7 @@ async function main() {
       dir,
       remote: 'origin',
       ref,
+      force: true,
       onAuth: () => ({ username: token }),
     });
 
