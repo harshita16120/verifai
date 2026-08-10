@@ -5,33 +5,34 @@ const path = require('path');
 
 const dir = path.resolve('.');
 const url = 'https://github.com/harshita16120/verifai.git';
-const ref = 'demo';
+const ref = process.env.GIT_BRANCH || 'main';
 
 async function main() {
   try {
-    console.log('🚀 Initializing Git repository with isomorphic-git...');
+    const token = process.env.GITHUB_TOKEN || '';
+    console.log(`🚀 Initializing Git repository with isomorphic-git...`);
     await git.init({ fs, dir });
 
     console.log('🔗 Setting remote origin URL...');
     await git.addRemote({ fs, dir, remote: 'origin', url, force: true });
 
-    console.log('🌿 Creating & checking out branch "demo"...');
+    console.log(`🌿 Checking out branch "${ref}"...`);
     await git.checkout({ fs, dir, ref, create: true }).catch(() => {
       return git.checkout({ fs, dir, ref });
     });
 
     console.log('📂 Staging project files...');
-    // Add files recursively ignoring node_modules, .next, etc.
-    const glob = require('isomorphic-git');
-    
     await git.add({ fs, dir, filepath: 'package.json' });
     await git.add({ fs, dir, filepath: 'next.config.js' });
     await git.add({ fs, dir, filepath: 'tailwind.config.ts' });
     await git.add({ fs, dir, filepath: 'tsconfig.json' });
     await git.add({ fs, dir, filepath: '.gitignore' });
+    await git.add({ fs, dir, filepath: 'middleware.ts' }).catch(() => {});
+    await git.add({ fs, dir, filepath: 'vercel.json' }).catch(() => {});
+    await git.add({ fs, dir, filepath: 'postcss.config.js' }).catch(() => {});
     await git.add({ fs, dir, filepath: 'README.md' }).catch(() => {});
 
-    // Stage app directory
+    // Stage directories recursively
     async function stageDir(relPath) {
       if (!fs.existsSync(path.join(dir, relPath))) return;
       const entries = fs.readdirSync(path.join(dir, relPath), { withFileTypes: true });
@@ -61,7 +62,7 @@ async function main() {
         name: 'Harshita',
         email: 'harshita@verifai.open',
       },
-      message: 'feat: VerifAI production release with 3D Blockchain background & AI detection',
+      message: 'fix: Add vercel.json framework config for Vercel deployment & routing',
     });
     console.log(`✅ Commit created with SHA: ${sha}`);
 
@@ -72,13 +73,14 @@ async function main() {
       dir,
       remote: 'origin',
       ref,
-      onAuth: () => ({ username: process.env.GITHUB_TOKEN || '' }),
+      onAuth: () => ({ username: token }),
     });
 
-    console.log('🎉 Push completed successfully!', pushResult);
+    console.log(`🎉 Push to ${ref} completed successfully!`, pushResult);
   } catch (err) {
     console.error('⚠️ Git operation report:', err.message);
   }
 }
 
 main();
+
