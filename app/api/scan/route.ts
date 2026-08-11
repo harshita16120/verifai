@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 
 // SSRF Firewall: Block requests to internal/private IP ranges

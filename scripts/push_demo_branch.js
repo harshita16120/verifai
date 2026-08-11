@@ -5,33 +5,40 @@ const path = require('path');
 
 const dir = path.resolve('.');
 const url = 'https://github.com/harshita16120/verifai.git';
-const ref = 'demo';
 
 async function main() {
   try {
+    const token = process.env.GITHUB_TOKEN || '';
     console.log('🚀 Initializing Git repository with isomorphic-git...');
     await git.init({ fs, dir });
 
     console.log('🔗 Setting remote origin URL...');
     await git.addRemote({ fs, dir, remote: 'origin', url, force: true });
 
-    console.log('🌿 Creating & checking out branch "demo"...');
-    await git.checkout({ fs, dir, ref, create: true }).catch(() => {
-      return git.checkout({ fs, dir, ref });
-    });
+    console.log('📂 Staging project files recursively...');
 
-    console.log('📂 Staging project files...');
-    // Add files recursively ignoring node_modules, .next, etc.
-    const glob = require('isomorphic-git');
-    
-    await git.add({ fs, dir, filepath: 'package.json' });
-    await git.add({ fs, dir, filepath: 'next.config.js' });
-    await git.add({ fs, dir, filepath: 'tailwind.config.ts' });
-    await git.add({ fs, dir, filepath: 'tsconfig.json' });
-    await git.add({ fs, dir, filepath: '.gitignore' });
-    await git.add({ fs, dir, filepath: 'README.md' }).catch(() => {});
+    // Explicit root files
+    const rootFiles = [
+      'package.json',
+      'next.config.js',
+      'tailwind.config.ts',
+      'tsconfig.json',
+      '.gitignore',
+      'middleware.ts',
+      'vercel.json',
+      'postcss.config.js',
+      'README.md',
+    ];
 
-    // Stage app directory
+    for (const file of rootFiles) {
+      if (fs.existsSync(path.join(dir, file))) {
+        await git.add({ fs, dir, filepath: file });
+        console.log(`  + Staged root file: ${file}`);
+      }
+    }
+
+    // Stage directories recursively
+    let stagedCount = 0;
     async function stageDir(relPath) {
       if (!fs.existsSync(path.join(dir, relPath))) return;
       const entries = fs.readdirSync(path.join(dir, relPath), { withFileTypes: true });
@@ -43,6 +50,7 @@ async function main() {
           }
         } else {
           await git.add({ fs, dir, filepath: entryRel });
+          stagedCount++;
         }
       }
     }
@@ -50,8 +58,11 @@ async function main() {
     await stageDir('app');
     await stageDir('components');
     await stageDir('lib');
+    await stageDir('data');
     await stageDir('public');
     await stageDir('scripts');
+
+    console.log(`✅ Staged total ${stagedCount} files in subdirectories.`);
 
     console.log('📝 Creating commit...');
     const sha = await git.commit({
@@ -61,23 +72,38 @@ async function main() {
         name: 'Harshita',
         email: 'harshita@verifai.open',
       },
-      message: 'feat: VerifAI production release with 3D Blockchain background & AI detection',
+      message: 'feat: Add Part A Human-Judged Evaluation Harness & Fusion Weight Tuner (/admin/eval)',
     });
     console.log(`✅ Commit created with SHA: ${sha}`);
 
-    console.log(`📤 Pushing to ${url} (branch: ${ref})...`);
-    const pushResult = await git.push({
+    // Push to main branch
+    console.log(`📤 Pushing to ${url} (branch: main)...`);
+    const mainPushResult = await git.push({
       fs,
       http,
       dir,
       remote: 'origin',
-      ref,
-      onAuth: () => ({ username: process.env.GITHUB_TOKEN || '' }),
+      ref: 'main',
+      force: true,
+      onAuth: () => ({ username: token }),
     });
+    console.log('🎉 Push to main completed:', mainPushResult.ok);
 
-    console.log('🎉 Push completed successfully!', pushResult);
+    // Push to demo branch
+    console.log(`📤 Pushing to ${url} (branch: demo)...`);
+    const demoPushResult = await git.push({
+      fs,
+      http,
+      dir,
+      remote: 'origin',
+      ref: 'demo',
+      force: true,
+      onAuth: () => ({ username: token }),
+    });
+    console.log('🎉 Push to demo completed:', demoPushResult.ok);
+
   } catch (err) {
-    console.error('⚠️ Git operation report:', err.message);
+    console.error('⚠️ Git operation report:', err.message, err.stack);
   }
 }
 

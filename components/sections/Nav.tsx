@@ -104,6 +104,13 @@ export const Nav: React.FC = () => {
         {/* Action Button */}
         <div className="hidden md:flex items-center gap-3">
           <Button
+            variant="secondary"
+            size="sm"
+            href="/eval"
+          >
+            Eval Harness
+          </Button>
+          <Button
             variant="primary"
             size="sm"
             onClick={scrollToDemo}
