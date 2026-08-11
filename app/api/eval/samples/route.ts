@@ -11,22 +11,37 @@ import { generateEvalSamples } from '@/lib/eval/sampleGenerator';
 import type { FusionWeights, JudgedResult, TuningPassResult } from '@/lib/eval/types';
 import { DEFAULT_FUSION_WEIGHTS } from '@/lib/eval/types';
 
+import defaultWeights from '@/data/fusion-weights.json';
+import defaultJudged from '@/data/judged-results.json';
+import defaultHistory from '@/data/weight-history.json';
+
 function readJsonFile<T>(relativePath: string, defaultValue: T): T {
   try {
     const filePath = path.join(process.cwd(), relativePath);
-    if (!fs.existsSync(filePath)) return defaultValue;
-    const content = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(content) as T;
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      return JSON.parse(content) as T;
+    }
   } catch {
-    return defaultValue;
+    // Fall back to bundled JSON defaults
   }
+  return defaultValue;
 }
 
 export async function GET() {
   try {
-    const weights = readJsonFile<FusionWeights>('data/fusion-weights.json', DEFAULT_FUSION_WEIGHTS);
-    const judgedResults = readJsonFile<JudgedResult[]>('data/judged-results.json', []);
-    const weightHistory = readJsonFile<TuningPassResult[]>('data/weight-history.json', []);
+    const weights = readJsonFile<FusionWeights>(
+      'data/fusion-weights.json',
+      (defaultWeights as FusionWeights) || DEFAULT_FUSION_WEIGHTS
+    );
+    const judgedResults = readJsonFile<JudgedResult[]>(
+      'data/judged-results.json',
+      (defaultJudged as JudgedResult[]) || []
+    );
+    const weightHistory = readJsonFile<TuningPassResult[]>(
+      'data/weight-history.json',
+      (defaultHistory as TuningPassResult[]) || []
+    );
 
     // Generate samples with active fusion weights
     const samples = generateEvalSamples(weights);

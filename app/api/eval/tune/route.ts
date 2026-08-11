@@ -12,38 +12,50 @@ import { generateEvalSamples } from '@/lib/eval/sampleGenerator';
 import type { FusionWeights, JudgedResult, TuningPassResult } from '@/lib/eval/types';
 import { DEFAULT_FUSION_WEIGHTS } from '@/lib/eval/types';
 
+import defaultWeights from '@/data/fusion-weights.json';
+import defaultJudged from '@/data/judged-results.json';
+import defaultHistory from '@/data/weight-history.json';
+
 const WEIGHTS_FILE = 'data/fusion-weights.json';
 const HISTORY_FILE = 'data/weight-history.json';
 const JUDGED_FILE = 'data/judged-results.json';
 
+let inMemoryWeights: FusionWeights = (defaultWeights as FusionWeights) || DEFAULT_FUSION_WEIGHTS;
+let inMemoryHistory: TuningPassResult[] = (defaultHistory as TuningPassResult[]) || [];
+
 function readJsonFile<T>(relativePath: string, defaultValue: T): T {
   try {
     const filePath = path.join(process.cwd(), relativePath);
-    if (!fs.existsSync(filePath)) return defaultValue;
-    const content = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(content) as T;
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      return JSON.parse(content) as T;
+    }
   } catch {
-    return defaultValue;
+    // Ignore fs errors on serverless
   }
+  return defaultValue;
 }
 
 function writeJsonFile<T>(relativePath: string, data: T) {
-  const filePath = path.join(process.cwd(), relativePath);
-  const dirPath = path.dirname(filePath);
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+  if (relativePath.includes('weights')) inMemoryWeights = data as any;
+  if (relativePath.includes('history')) inMemoryHistory = data as any;
+
+  try {
+    const filePath = path.join(process.cwd(), relativePath);
+    const dirPath = path.dirname(filePath);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch {
+    // Fallback to memory on read-only serverless filesystem
   }
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
 }
 
-/**
- * POST: Run a fusion weight tuning pass over judged results.
- * Returns proposed weights, working-set accuracy delta, held-out accuracy, and regression flag.
- */
 export async function POST() {
   try {
-    const currentWeights = readJsonFile<FusionWeights>(WEIGHTS_FILE, DEFAULT_FUSION_WEIGHTS);
-    const judgedResults = readJsonFile<JudgedResult[]>(JUDGED_FILE, []);
+    const currentWeights = readJsonFile<FusionWeights>(WEIGHTS_FILE, inMemoryWeights);
+    const judgedResults = readJsonFile<JudgedResult[]>(JUDGED_FILE, defaultJudged as JudgedResult[]);
 
     const samples = generateEvalSamples(currentWeights);
     const samplesById = samples.reduce<Record<string, typeof samples[0]>>((acc, s) => {
@@ -65,9 +77,6 @@ export async function POST() {
   }
 }
 
-/**
- * PUT: Apply proposed weights into data/fusion-weights.json and log pass to data/weight-history.json.
- */
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
@@ -81,15 +90,13 @@ export async function PUT(req: NextRequest) {
       );
     }
 
-    // Write new active weights
     writeJsonFile(WEIGHTS_FILE, newWeights);
 
-    // Append to versioned weight history
-    const history = readJsonFile<TuningPassResult[]>(HISTORY_FILE, []);
+    const history = readJsonFile<TuningPassResult[]>(HISTORY_FILE, inMemoryHistory);
     const passToRecord: TuningPassResult = passResult || {
       id: `TUNE-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      beforeWeights: readJsonFile<FusionWeights>(WEIGHTS_FILE, DEFAULT_FUSION_WEIGHTS),
+      beforeWeights: inMemoryWeights,
       afterWeights: newWeights,
       workingSetAccuracyBefore: 0,
       workingSetAccuracyAfter: 0,

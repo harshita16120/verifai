@@ -8,27 +8,41 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import type { JudgedResult } from '@/lib/eval/types';
+import defaultJudged from '@/data/judged-results.json';
 
 const DATA_FILE = 'data/judged-results.json';
+
+// In-memory fallback for serverless runtime (Vercel)
+let inMemoryResults: JudgedResult[] = (defaultJudged as JudgedResult[]) || [];
 
 function readJudgedResults(): JudgedResult[] {
   try {
     const filePath = path.join(process.cwd(), DATA_FILE);
-    if (!fs.existsSync(filePath)) return [];
-    const content = fs.readFileSync(filePath, 'utf8');
-    return JSON.parse(content) as JudgedResult[];
+    if (fs.existsSync(filePath)) {
+      const content = fs.readFileSync(filePath, 'utf8');
+      const parsed = JSON.parse(content) as JudgedResult[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        inMemoryResults = parsed;
+      }
+    }
   } catch {
-    return [];
+    // Ignore fs errors on serverless
   }
+  return inMemoryResults;
 }
 
 function writeJudgedResults(results: JudgedResult[]) {
-  const filePath = path.join(process.cwd(), DATA_FILE);
-  const dirPath = path.dirname(filePath);
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
+  inMemoryResults = results;
+  try {
+    const filePath = path.join(process.cwd(), DATA_FILE);
+    const dirPath = path.dirname(filePath);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+    fs.writeFileSync(filePath, JSON.stringify(results, null, 2), 'utf8');
+  } catch {
+    // Safe fallback to in-memory on Vercel read-only filesystem
   }
-  fs.writeFileSync(filePath, JSON.stringify(results, null, 2), 'utf8');
 }
 
 export async function POST(req: NextRequest) {
@@ -55,7 +69,6 @@ export async function POST(req: NextRequest) {
       timestamp: new Date().toISOString(),
     };
 
-    // Upsert judgment
     const index = currentResults.findIndex((r) => r.sampleId === sampleId);
     if (index >= 0) {
       currentResults[index] = judgmentEntry;
