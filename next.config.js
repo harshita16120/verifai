@@ -50,6 +50,18 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['three', '@react-three/fiber'],
+  async rewrites() {
+    return [
+      {
+        source: '/admin/eval',
+        destination: '/eval',
+      },
+      {
+        source: '/admin/eval/:path*',
+        destination: '/eval/:path*',
+      },
+    ];
+  },
   async headers() {
     return [
       {

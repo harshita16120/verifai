@@ -106,7 +106,7 @@ export const Nav: React.FC = () => {
           <Button
             variant="secondary"
             size="sm"
-            href="/admin/eval"
+            href="/eval"
           >
             Eval Harness
           </Button>
