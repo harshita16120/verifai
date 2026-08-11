@@ -34,3 +34,14 @@ Thumbs.db
 *.swp
 .idea/
 .vscode/
+
+# python
+__pycache__/
+*.pyc
+venv/
+.dhash_cache.json
+
+# training artifacts & datasets
+/models/
+/public/models/
+/data/

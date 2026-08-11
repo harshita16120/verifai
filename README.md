@@ -56,7 +56,11 @@ lib/
   utils.ts              cn() — clsx + tailwind-merge
 middleware.ts           rate limit, bot UA block, payload size guard (matches /api/*)
 next.config.js          security headers incl. CSP
-scripts/                train_deepfake_detector.py, inference_server.py, push_demo_branch.js
+scripts/
+  preprocess_faces.py         face-crop + multi-dataset merge → ImageFolder + manifest
+  train_deepfake_detector.py  training, group split, calibration, cross-dataset eval
+  inference_server.py         FastAPI /predict + /health
+  push_demo_branch.js
 ```
 
 ## Scan flow
@@ -103,18 +107,87 @@ instances — swap in Redis/Upstash if this ever goes multi-instance.
 
 ## Training
 
-`scripts/train_deepfake_detector.py` fine-tunes EfficientNet on Kaggle deepfake benchmarks
-(`manjilkarki/deepfake-and-real-images`, `xhlulu/140k-real-and-fake-faces`,
-`ciplab/real-and-fake-face-detection`) via `kagglehub`, falling back to a local `data/Dataset`
-folder. It writes `models/universal_deepfake_detector.pth` and an ONNX export.
-`inference_server.py` loads `models/deepfake_detector.pth` — note the filenames differ, so
-rename or point `MODEL_PATH` at the trained checkpoint before serving.
+```bash
+pip install torch torchvision pillow fastapi uvicorn python-multipart kagglehub
+pip install facenet-pytorch          # optional, for face cropping
+pip install onnxscript onnx          # optional, torch>=2.9 needs these to export ONNX
+
+# 0. verify the metric / split / hashing logic
+python scripts/train_deepfake_detector.py --selfcheck
+python scripts/preprocess_faces.py --selfcheck
+
+# 1. build a clean training folder (crop faces + merge datasets)
+python scripts/preprocess_faces.py --src <kaggle_dsA> --src <kaggle_dsB> --out data/faces
+
+# 2. train, and evaluate on a source you did NOT train on
+python scripts/train_deepfake_detector.py --data-dir data/faces --eval-dir data/celebdf
+
+# 3. serve
+python scripts/inference_server.py
+```
+
+### `preprocess_faces.py`
+
+Crops to the detected face with a 35% margin (the jawline seam is the single most
+discriminative region for face swaps, so a tight crop throws away the evidence) and merges
+datasets with incompatible layouts into one `ImageFolder` tree. Class is inferred from the
+leaf directory name — `Fake`, `training_real`, `real-vs-fake` all resolve correctly; use
+`--label-map` for anything that doesn't. Everything is re-encoded to JPEG q95 on purpose:
+when one class is PNG and the other JPEG, a model will learn the container instead of the
+forgery. Writes `manifest.json` with provenance and the crop settings.
+
+`--no-crop` merges without face detection. `--limit N` for a smoke test.
+
+### `train_deepfake_detector.py`
+
+| Flag | Default | Notes |
+|---|---|---|
+| `--arch` | `b0` | `b4` runs at its native 380px |
+| `--epochs` / `--batch-size` / `--lr` | 12 / 32 / 3e-4 | OneCycle schedule |
+| `--freeze-epochs` | 2 | head-only warmup before unfreezing the backbone |
+| `--split-by` | `group` | `group` keeps near-duplicates on one side of the split |
+| `--val-frac` | 0.15 | |
+| `--eval-dir` | — | held-out dataset from a different source |
+| `--eval-only` | — | load the checkpoint and just run `--eval-dir` |
+| `--data-dir` | — | skip kagglehub |
+
+Expects an `ImageFolder` layout, and **the authentic-image folder must be named `Real`** —
+the script locates it by name and exits if it can't. A `Train/` + `Validation/` split is used
+when present; otherwise a holdout is carved out.
+
+**Group splitting** is the default because a per-image split leaks. These datasets contain
+near-duplicate frames, and a face swap hashes almost identically to the original it was made
+from — so the same content lands on both sides and the holdout score is inflated. A 64-bit
+dHash with 4-band LSH groups near-duplicates in linear time, and whole groups move together.
+(These datasets ship no identity labels; this is a proxy for identity grouping, not a
+substitute.) The hash cache is written to `.dhash_cache.json` inside the data dir.
+
+Per epoch it reports balanced accuracy, real-vs-rest AUC and per-class recall, and selects
+the checkpoint on **balanced** accuracy — plain accuracy just rewards predicting the majority
+class. After training, temperature scaling is fitted on the holdout; if the holdout separates
+too cleanly to calibrate against, it says so and falls back to T=1 rather than driving every
+score to 0 or 100.
+
+The checkpoint stores architecture, class names, real-class index, image size, temperature,
+face-crop settings and validation metrics alongside the weights. The server reconstructs the
+exact model and the exact preprocessing from it, and refuses to start without a checkpoint
+rather than serving random weights.
+
+### Reading the results
+
+`--eval-dir` is the number that matters. In-distribution accuracy tells you how well the model
+memorized one generator's fingerprint; the drop on an unseen source is your real-world
+accuracy. A drop above 0.20 is flagged in the output. Train on manjilkarki, evaluate on
+FaceForensics++ or Celeb-DF, and believe the second number.
 
 ## Honest caveats
 
 - Without the Python server running, verdicts are **heuristics over filenames and byte
   markers**, not image forensics. A file called `real_photo.jpg` scores ~95 regardless of
-  content. Fine for a demo, not for real verification claims.
+  content. Fine for a demo, not for real verification claims. No checkpoint ships with this
+  repo, so this is the default path until you train one.
+- The model handles **images only**. Video and audio uploads get a 415 from the server and
+  fall back to heuristics, despite the UI accepting them.
 - The model accuracy figures and detector names in `lib/models/onnx_classifier.ts` are
   presentation copy for the landing page, not measured results.
 - `breakdown`, `hash`, and `trustBadgeUrl` are synthesised server-side; there's no blockchain

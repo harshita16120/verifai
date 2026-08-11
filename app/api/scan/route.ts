@@ -132,7 +132,8 @@ export async function POST(req: NextRequest) {
         const pyRes = await fetch('http://localhost:8000/predict', {
           method: 'POST',
           body: pyFormData,
-          signal: AbortSignal.timeout(1500),
+          // CPU inference of a cold EfficientNet needs more than 1.5s on the first request.
+          signal: AbortSignal.timeout(8000),
         });
 
         if (pyRes.ok) {
