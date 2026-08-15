@@ -130,11 +130,11 @@ export async function POST(req: NextRequest) {
       try {
         const pyFormData = new FormData();
         pyFormData.append('file', fileBlob, filename);
+        pyFormData.append('fileType', fileType);
 
         const pyRes = await fetch('http://localhost:8000/predict', {
           method: 'POST',
           body: pyFormData,
-          // CPU inference of a cold EfficientNet needs more than 1.5s on the first request.
           signal: AbortSignal.timeout(8000),
         });
 

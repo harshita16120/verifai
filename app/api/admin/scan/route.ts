@@ -98,6 +98,7 @@ export async function POST(req: NextRequest) {
     try {
       const pyFormData = new FormData();
       pyFormData.append('file', fileBlob, filename);
+      pyFormData.append('fileType', fileType);
 
       const pyRes = await fetch('http://localhost:8000/predict', {
         method: 'POST',

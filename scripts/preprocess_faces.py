@@ -135,6 +135,7 @@ def selfcheck():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", action="append", help="raw dataset root (repeatable)")
+    ap.add_argument("--dataset-config", default="scripts/datasets.yaml", help="YAML file listing configured dataset roots")
     ap.add_argument("--out", default="data/faces")
     ap.add_argument("--size", type=int, default=256, help="output edge; leave room above the 224 train crop")
     ap.add_argument("--margin", type=float, default=0.35, help="box expansion, fraction of face size")
@@ -148,8 +149,27 @@ def main():
     if args.selfcheck:
         selfcheck()
         return
+
+    # Auto-resolve dataset sources from datasets.yaml if --src is not passed
     if not args.src:
-        ap.error("--src is required")
+        if os.path.exists(args.dataset_config):
+            cfg_path = args.dataset_config
+            try:
+                import yaml
+                with open(cfg_path, "r", encoding="utf-8") as fh:
+                    cfg = yaml.safe_load(fh)
+                    configured_paths = [
+                        ds["local_path"] for ds in cfg.get("datasets", {}).values()
+                        if ds.get("local_path") and os.path.exists(ds.get("local_path"))
+                    ]
+                    if configured_paths:
+                        args.src = configured_paths
+                        print(f"📖 Loaded {len(configured_paths)} dataset paths from {cfg_path}: {configured_paths}")
+            except Exception as e:
+                print(f"⚠️ Note reading {cfg_path}: {e}")
+
+    if not args.src:
+        ap.error("--src is required or configure valid local_path in scripts/datasets.yaml")
 
     overrides = json.loads(args.label_map) if args.label_map else {}
     overrides = {k.lower(): v for k, v in overrides.items()}

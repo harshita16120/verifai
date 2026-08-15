@@ -111,21 +111,33 @@ async def predict_media(file: UploadFile = File(...)):
     if len(contents) > MAX_BYTES:
         raise HTTPException(status_code=413, detail="File exceeds 50MB limit.")
 
-    try:
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
-    except (UnidentifiedImageError, OSError):
-        # Video and audio are out of scope for this image model; 415 tells the caller
-        # to fall back rather than looking like a server fault.
-        raise HTTPException(status_code=415, detail="Not a decodable image. Video/audio unsupported.")
+    is_audio = file.filename.endswith(('.wav', '.mp3', '.flac', '.ogg', '.m4a'))
+    image = None
+
+    if is_audio:
+        try:
+            from preprocess_audio import generate_spectrogram_image
+            # Write temp audio file
+            temp_path = f"_temp_{file.filename}"
+            with open(temp_path, "wb") as f:
+                f.write(contents)
+            image = generate_spectrogram_image(temp_path, META["img_size"])
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception as e:
+            raise HTTPException(status_code=415, detail=f"Audio spectrogram conversion failed: {e}")
+    else:
+        try:
+            image = Image.open(io.BytesIO(contents)).convert("RGB")
+        except (UnidentifiedImageError, OSError):
+            raise HTTPException(status_code=415, detail="Not a decodable media file.")
 
     face_found = None
-    if DETECTOR is not None:
+    if not is_audio and DETECTOR is not None:
         cropped = crop_face(DETECTOR, image, META["face_margin"])
         face_found = cropped is not None
         if not face_found:
-            # No face means this model has nothing to say. Returning a confident-looking
-            # score on a landscape photo is exactly the vagueness worth avoiding.
-            raise HTTPException(status_code=422, detail="No face detected; model is face-only.")
+            raise HTTPException(status_code=422, detail="No face detected; image model is face-only.")
         image = cropped
 
     try:
