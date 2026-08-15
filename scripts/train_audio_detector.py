@@ -16,6 +16,9 @@ import random
 import sys
 import time
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import torch
 import torch.nn as nn
 import torch.optim as optim

@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { validateFileContent, isFileTooLarge } from '@/lib/admin/file-validation';
+import { logError, logAlert, generateRequestId, safeErrorResponse } from '@/lib/admin/logger';
 
 function isForbiddenUrl(urlString: string): boolean {
   try {
@@ -41,6 +43,7 @@ function isForbiddenUrl(urlString: string): boolean {
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = generateRequestId();
   try {
     let filename = 'admin_scan.jpg';
     let fileSize = '2.4 MB';
@@ -55,12 +58,34 @@ export async function POST(req: NextRequest) {
       if (!file) {
         return NextResponse.json({ error: 'No file provided in form data.' }, { status: 400 });
       }
+
+      // Server-side 50MB enforcement
+      if (isFileTooLarge(file.size)) {
+        return NextResponse.json(
+          { error: 'File exceeds the 50MB size limit.' },
+          { status: 413 }
+        );
+      }
+
       filename = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
       const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
       fileSize = `${sizeMb} MB`;
       if (file.type.startsWith('video/')) fileType = 'video';
       else if (file.type.startsWith('audio/')) fileType = 'audio';
       else fileType = 'image';
+
+      // Magic-byte content validation
+      const buffer = await file.arrayBuffer();
+      const validation = validateFileContent(buffer, fileType);
+      if (!validation.valid) {
+        return NextResponse.json(
+          {
+            error: 'File content validation failed',
+            detail: validation.reason,
+          },
+          { status: 400 }
+        );
+      }
 
       fileBlob = file;
     } else if (contentType.includes('application/json')) {
@@ -209,10 +234,8 @@ export async function POST(req: NextRequest) {
     };
 
     return NextResponse.json(responseData, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || 'Failed to analyze file via direct model' },
-      { status: 500 }
-    );
+  } catch (err) {
+    logError('admin-scan', err, requestId);
+    return NextResponse.json(safeErrorResponse(requestId), { status: 500 });
   }
 }

@@ -173,6 +173,11 @@ export const UploadZone: React.FC<UploadZoneProps> = ({ onStartScan, className }
           </div>
         )}
 
+        {/* Consent & Privacy Retention Notice */}
+        <p className="text-[11px] text-ink-400 bg-ink-900/40 p-2.5 rounded-xl border border-ink-800/60 leading-normal">
+          <span className="font-semibold text-brand-blue-300">Privacy & Acceptable Use:</span> Files are processed in memory only and are <strong className="text-white">not stored</strong> on our servers. Please ensure you have consent from any depicted individuals before scanning media.
+        </p>
+
         {errorMsg && (
           <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs">
             <AlertCircle className="w-4 h-4 flex-shrink-0 stroke-[2]" />

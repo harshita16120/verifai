@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { validateFileContent, isFileTooLarge } from '@/lib/admin/file-validation';
+import { logError, generateRequestId, safeErrorResponse } from '@/lib/admin/logger';
 
 // SSRF Firewall: Block requests to internal/private IP ranges
 function isForbiddenUrl(urlString: string): boolean {
@@ -79,6 +81,7 @@ function inspectFileBuffer(buffer: ArrayBuffer): {
 }
 
 export async function POST(req: NextRequest) {
+  const requestId = generateRequestId();
   try {
     let filename = 'photo_scan.jpg';
     let fileSize = '2.4 MB';
@@ -92,6 +95,14 @@ export async function POST(req: NextRequest) {
       const formData = await req.formData();
       const file = formData.get('file') as File | null;
       if (file) {
+        // Server-side 50MB enforcement
+        if (isFileTooLarge(file.size)) {
+          return NextResponse.json(
+            { error: 'File exceeds the 50MB size limit.' },
+            { status: 413 }
+          );
+        }
+
         filename = file.name.replace(/[^a-zA-Z0-9_.-]/g, '_');
         const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
         fileSize = `${sizeMb} MB`;
@@ -101,6 +112,18 @@ export async function POST(req: NextRequest) {
 
         fileBlob = file;
         fileBuffer = await file.arrayBuffer();
+
+        // Magic-byte content validation — verify actual file content matches declared type
+        const validation = validateFileContent(fileBuffer, fileType);
+        if (!validation.valid) {
+          return NextResponse.json(
+            {
+              error: 'File content validation failed',
+              detail: validation.reason,
+            },
+            { status: 400 }
+          );
+        }
       }
     } else if (contentType.includes('application/json')) {
       const json = await req.json();
@@ -350,13 +373,12 @@ export async function POST(req: NextRequest) {
       c2paStatus,
       trustBadgeUrl: `https://verifai.open/badge/${scanId}`,
       modelEngine: pyInferenceResult ? 'PyTorch EfficientNet-B0 (Trained on Kaggle manjilkarki Dataset)' : 'Kaggle Benchmark Fine-Tuned Forensics Engine',
+      retentionPolicy: 'Your file was processed in memory only and was not saved to our servers.',
     };
 
     return NextResponse.json(responseData, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json(
-      { error: err?.message || 'Failed to analyze file' },
-      { status: 500 }
-    );
+  } catch (err) {
+    logError('public-scan', err, requestId);
+    return NextResponse.json(safeErrorResponse(requestId), { status: 500 });
   }
 }

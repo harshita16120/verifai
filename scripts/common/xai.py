@@ -69,5 +69,5 @@ def generate_gradcam(model: torch.nn.Module, input_tensor: torch.Tensor, target_
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     Image.fromarray(heatmap).save(output_path)
-    print(f"💡 Saved XAI Grad-CAM explanation -> {output_path}")
+    print(f"[XAI] Saved Grad-CAM explanation -> {output_path}")
     return output_path

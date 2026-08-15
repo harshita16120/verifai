@@ -1,19 +1,35 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { verifySessionToken, COOKIE_NAME } from '@/lib/admin/auth';
+import { hasPermission, type UserRole } from '@/lib/admin/users';
+import { logAuditEvent, AUDIT_ACTIONS } from '@/lib/admin/audit';
+import { logError, generateRequestId, safeErrorResponse } from '@/lib/admin/logger';
 
 interface ModelCheckpointInfo {
   filename: string;
-  path: string;
+  path?: string; // Only included for owner role
   sizeBytes: number;
   updatedAt: string;
   type: 'pth' | 'onnx' | 'other';
   metadata?: any;
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const requestId = generateRequestId();
+
   try {
+    // Determine caller's role for field-level access control
+    const token = req.cookies.get(COOKIE_NAME)?.value;
+    let callerRole: UserRole = 'viewer';
+    if (token) {
+      const session = await verifySessionToken(token);
+      if (session.valid && session.role) {
+        callerRole = session.role;
+      }
+    }
+
     const searchDirs = [
       path.resolve('models'),
       path.resolve('public/models'),
@@ -37,7 +53,6 @@ export async function GET() {
 
           if (ext === '.pth') {
             try {
-              // Try reading metadata using python one-liner
               const pyCmd = `python -c "import torch, json, sys; ckpt=torch.load(r'${fullPath}', map_location='cpu', weights_only=False); print(json.dumps({k: (v if not hasattr(v, 'tolist') else v.tolist()) for k,v in ckpt.items() if k != 'state_dict'}))"`;
               const output = execSync(pyCmd, { timeout: 3000, encoding: 'utf-8' }).trim();
               metadata = JSON.parse(output);
@@ -46,20 +61,91 @@ export async function GET() {
             }
           }
 
-          checkpoints.push({
+          const entry: ModelCheckpointInfo = {
             filename: path.basename(relFile),
-            path: fullPath.replace(/\\/g, '/'),
             sizeBytes: stats.size,
             updatedAt: stats.mtime.toISOString(),
             type: ext === '.pth' ? 'pth' : 'onnx',
             metadata,
-          });
+          };
+
+          // Only expose full filesystem paths to owner role
+          if (callerRole === 'owner') {
+            entry.path = fullPath.replace(/\\/g, '/');
+          }
+
+          // Strip potentially identifying metadata for non-owner roles
+          if (callerRole !== 'owner' && metadata) {
+            // Remove any fields that might contain file paths or personal info
+            delete metadata.data_dir;
+            delete metadata.output_dir;
+            delete metadata.dataset_path;
+          }
+
+          checkpoints.push(entry);
         }
       }
     }
 
     return NextResponse.json({ checkpoints }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to list models' }, { status: 500 });
+  } catch (err) {
+    logError('list-models', err, requestId);
+    return NextResponse.json(safeErrorResponse(requestId), { status: 500 });
+  }
+}
+
+/**
+ * POST /api/admin/models — Promote a checkpoint (owner only).
+ * Body: { filename: string }
+ */
+export async function POST(req: NextRequest) {
+  const requestId = generateRequestId();
+
+  try {
+    const token = req.cookies.get(COOKIE_NAME)?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const session = await verifySessionToken(token);
+    if (!session.valid || session.role !== 'owner') {
+      return NextResponse.json(
+        { error: 'Forbidden. Owner role required to promote checkpoints.' },
+        { status: 403 }
+      );
+    }
+
+    const body = await req.json();
+    const { filename } = body;
+
+    if (!filename) {
+      return NextResponse.json({ error: 'filename is required.' }, { status: 400 });
+    }
+
+    // Sanitize filename to prevent path traversal
+    const safeFilename = path.basename(filename);
+    if (safeFilename !== filename) {
+      return NextResponse.json(
+        { error: 'Invalid filename. Path traversal is not allowed.' },
+        { status: 400 }
+      );
+    }
+
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+
+    logAuditEvent(session.email!, AUDIT_ACTIONS.CHECKPOINT_PROMOTED, ip, {
+      filename: safeFilename,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        message: `Checkpoint "${safeFilename}" marked for promotion. Manual deployment required.`,
+      },
+      { status: 200 }
+    );
+  } catch (err) {
+    logError('promote-checkpoint', err, requestId);
+    return NextResponse.json(safeErrorResponse(requestId), { status: 500 });
   }
 }

@@ -21,7 +21,7 @@ def fit_temperature(logits: torch.Tensor, labels: torch.Tensor) -> float:
     t = float(log_t.exp().item())
     before = nll(logits, labels).item()
     after = nll(logits / t, labels).item()
-    print(f"🌡️  Temperature {t:.3f} | val NLL {before:.4f} → {after:.4f}")
+    print(f"[TEMP] Temperature {t:.3f} | val NLL {before:.4f} -> {after:.4f}")
 
     if after > before:
         return 1.0

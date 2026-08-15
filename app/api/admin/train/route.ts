@@ -2,9 +2,33 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { spawn } from 'child_process';
+import { verifySessionToken, COOKIE_NAME } from '@/lib/admin/auth';
+import { hasPermission } from '@/lib/admin/users';
+import { logAuditEvent, AUDIT_ACTIONS } from '@/lib/admin/audit';
+import { logError, logAlert, generateRequestId, safeErrorResponse } from '@/lib/admin/logger';
 
 export async function POST(req: NextRequest) {
+  const requestId = generateRequestId();
+
   try {
+    // --- RBAC: require 'run_training' permission (owner or trainer) ---
+    const token = req.cookies.get(COOKIE_NAME)?.value;
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const session = await verifySessionToken(token);
+    if (!session.valid || !session.role) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    if (!hasPermission(session.role, 'run_training')) {
+      return NextResponse.json(
+        { error: 'Forbidden. Your role does not have permission to start training runs.' },
+        { status: 403 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const scriptType = body.scriptType || 'image'; // 'image' or 'audio'
     const customArgs: string[] = body.args || [];
@@ -24,6 +48,7 @@ export async function POST(req: NextRequest) {
       endTime: string | null;
       exitCode: number | null;
       args: string[];
+      startedBy: string;
     } = {
       id: runId,
       scriptType,
@@ -32,6 +57,7 @@ export async function POST(req: NextRequest) {
       endTime: null,
       exitCode: null,
       args: customArgs,
+      startedBy: session.email || 'unknown',
     };
 
     fs.writeFileSync(runJsonPath, JSON.stringify(runData, null, 2));
@@ -40,6 +66,7 @@ export async function POST(req: NextRequest) {
     const logStream = fs.createWriteStream(logPath, { flags: 'a' });
 
     logStream.write(`[SYSTEM] Starting ${scriptType} training run ${runId}...\n`);
+    logStream.write(`[SYSTEM] Started by: ${session.email}\n`);
     logStream.write(`[SYSTEM] Command: python ${scriptFile} ${customArgs.join(' ')}\n\n`);
 
     const child = spawn('python', [scriptFile, ...customArgs], {
@@ -64,18 +91,38 @@ export async function POST(req: NextRequest) {
       runData.endTime = new Date().toISOString();
       (runData as any).exitCode = code;
       fs.writeFileSync(runJsonPath, JSON.stringify(runData, null, 2));
+
+      if (code !== 0) {
+        logAlert(`Training run ${runId} (${scriptType}) crashed with exit code ${code}`, {
+          runId,
+          scriptType,
+          startedBy: session.email,
+        });
+      }
     });
 
     child.unref();
 
+    // Audit log
+    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || '127.0.0.1';
+    logAuditEvent(session.email!, AUDIT_ACTIONS.TRAINING_STARTED, ip, {
+      runId,
+      scriptType,
+      args: customArgs,
+    });
+
     return NextResponse.json({ success: true, runId, runDir: `runs/${runId}` }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to start training run' }, { status: 500 });
+  } catch (err) {
+    logError('start-training', err, requestId);
+    return NextResponse.json(safeErrorResponse(requestId), { status: 500 });
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const requestId = generateRequestId();
+
   try {
+    // All authenticated users can view runs
     const runsDir = path.resolve('runs');
     if (!fs.existsSync(runsDir)) {
       return NextResponse.json({ runs: [] });
@@ -98,7 +145,8 @@ export async function GET() {
 
     runs.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
     return NextResponse.json({ runs }, { status: 200 });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to list runs' }, { status: 500 });
+  } catch (err) {
+    logError('list-runs', err, requestId);
+    return NextResponse.json(safeErrorResponse(requestId), { status: 500 });
   }
 }

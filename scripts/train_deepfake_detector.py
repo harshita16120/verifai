@@ -6,6 +6,9 @@ import random
 import sys
 import time
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -327,9 +330,10 @@ def get_data_loaders(data_dir, img_size, batch_size, workers, val_frac=0.15, see
         sys.exit(f"❌ Class {classes[counts.index(0)]} has no training images.")
 
     pin = torch.cuda.is_available()
+    drop_train_last = len(train_ds) > batch_size
     loaders = {
         "train": DataLoader(train_ds, batch_size=batch_size, shuffle=True,
-                            num_workers=workers, pin_memory=pin, drop_last=True),
+                            num_workers=workers, pin_memory=pin, drop_last=drop_train_last),
         "val": DataLoader(val_ds, batch_size=batch_size, shuffle=False,
                           num_workers=workers, pin_memory=pin),
     }
@@ -450,8 +454,9 @@ def train_model(model, loaders, device, classes, real_idx, epochs, lr, freeze_ep
     criterion = nn.CrossEntropyLoss(weight=weights, label_smoothing=0.05)
 
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
+    steps_per_epoch = max(1, len(loaders["train"]))
     scheduler = optim.lr_scheduler.OneCycleLR(
-        optimizer, max_lr=lr, epochs=epochs, steps_per_epoch=len(loaders["train"]), pct_start=0.25
+        optimizer, max_lr=lr, epochs=epochs, steps_per_epoch=steps_per_epoch, pct_start=0.25
     )
     use_amp = device.type == "cuda"
     scaler = torch.amp.GradScaler(device.type, enabled=use_amp)

@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifySessionToken, COOKIE_NAME } from './lib/admin/auth';
+import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from './lib/admin/csrf';
 
-// In-memory rate limiting stores
+const COOKIE_NAME = 'verifai_admin_session';
+
+// In-memory rate limiting stores for Edge Middleware
 const publicRateLimitMap = new Map<string, { count: number; resetTime: number }>();
 const adminRateLimitMap = new Map<string, { count: number; resetTime: number }>();
 
@@ -33,13 +35,14 @@ export async function middleware(req: NextRequest) {
   const isAdminApiRoute = pathname.startsWith('/api/admin');
 
   if (isAdminRoute || isAdminApiRoute) {
-    const isLoginPath = pathname === '/admin/login' || pathname === '/api/admin/auth/login';
+    const isLoginPath =
+      pathname === '/admin/login' ||
+      pathname === '/api/admin/auth/login';
 
     if (!isLoginPath) {
       const token = req.cookies.get(COOKIE_NAME)?.value;
-      const { valid } = token ? await verifySessionToken(token) : { valid: false };
 
-      if (!valid) {
+      if (!token) {
         if (isAdminApiRoute) {
           return new NextResponse(
             JSON.stringify({ error: 'Unauthorized', message: 'Admin authentication required.' }),
@@ -49,22 +52,42 @@ export async function middleware(req: NextRequest) {
         const loginUrl = new URL('/admin/login', req.url);
         return NextResponse.redirect(loginUrl);
       }
-    }
 
-    // Admin Rate Limiter
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1';
-    const now = Date.now();
-    const currentRecord = adminRateLimitMap.get(ip);
+      // --- CSRF Validation for state-changing admin API requests ---
+      if (
+        isAdminApiRoute &&
+        ['POST', 'PUT', 'DELETE'].includes(req.method) &&
+        pathname !== '/api/admin/auth/logout' // Allow logout without CSRF
+      ) {
+        const csrfCookie = req.cookies.get(CSRF_COOKIE_NAME)?.value;
+        const csrfHeader = req.headers.get(CSRF_HEADER_NAME);
 
-    if (!currentRecord || now > currentRecord.resetTime) {
-      adminRateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
-    } else {
-      currentRecord.count += 1;
-      if (currentRecord.count > ADMIN_MAX_REQUESTS) {
-        return new NextResponse(
-          JSON.stringify({ error: 'Too Many Requests', message: 'Admin rate limit exceeded.' }),
-          { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } }
-        );
+        if (!validateCsrfToken(csrfCookie, csrfHeader || undefined)) {
+          return new NextResponse(
+            JSON.stringify({
+              error: 'CSRF validation failed',
+              message: 'Missing or invalid CSRF token. Include the X-CSRF-Token header.',
+            }),
+            { status: 403, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // Admin rate limiter
+      const ip = req.headers.get('x-forwarded-for')?.split(',')[0] || '127.0.0.1';
+      const now = Date.now();
+      const currentRecord = adminRateLimitMap.get(ip);
+
+      if (!currentRecord || now > currentRecord.resetTime) {
+        adminRateLimitMap.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
+      } else {
+        currentRecord.count += 1;
+        if (currentRecord.count > ADMIN_MAX_REQUESTS) {
+          return new NextResponse(
+            JSON.stringify({ error: 'Too Many Requests', message: 'Admin rate limit exceeded.' }),
+            { status: 429, headers: { 'Content-Type': 'application/json', 'Retry-After': '60' } }
+          );
+        }
       }
     }
   }
@@ -118,4 +141,3 @@ export async function middleware(req: NextRequest) {
 export const config = {
   matcher: ['/api/:path*', '/admin/:path*'],
 };
-
