@@ -61,6 +61,7 @@ async function main() {
     await stageDir('data');
     await stageDir('public');
     await stageDir('scripts');
+    await stageDir('.github');
 
     console.log(`✅ Staged total ${stagedCount} files in subdirectories.`);
 
@@ -72,22 +73,9 @@ async function main() {
         name: 'Harshita',
         email: 'harshita@verifai.open',
       },
-      message: 'feat: Add Part A Human-Judged Evaluation Harness & Fusion Weight Tuner (/admin/eval)',
+      message: 'feat: Complete VerifAI Admin Panel, Multi-Modal Audio Pipeline, CI/CD & Free AI Integrations',
     });
     console.log(`✅ Commit created with SHA: ${sha}`);
-
-    // Push to main branch
-    console.log(`📤 Pushing to ${url} (branch: main)...`);
-    const mainPushResult = await git.push({
-      fs,
-      http,
-      dir,
-      remote: 'origin',
-      ref: 'main',
-      force: true,
-      onAuth: () => ({ username: token }),
-    });
-    console.log('🎉 Push to main completed:', mainPushResult.ok);
 
     // Push to demo branch
     console.log(`📤 Pushing to ${url} (branch: demo)...`);
