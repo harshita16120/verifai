@@ -2,6 +2,12 @@ import io
 import os
 import sys
 
+# Force UTF-8 output encoding for Windows command prompts
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -59,7 +65,7 @@ def load_trained_model():
             "val_metrics": {"balanced_acc": 0.942, "auc_real_vs_rest": 0.965, "acc": 0.94}
         }
         torch.save(ckpt, MODEL_PATH)
-        print(f"✅ Created default checkpoint -> {MODEL_PATH}")
+        print(f"[OK] Created default checkpoint -> {MODEL_PATH}")
 
     ckpt = torch.load(MODEL_PATH, map_location=device, weights_only=False)
 
@@ -85,7 +91,7 @@ def load_trained_model():
     model.load_state_dict(ckpt["state_dict"])
     model.to(device).eval()
 
-    print(f"✅ Loaded Model from {MODEL_PATH}")
+    print(f"[OK] Loaded Model from {MODEL_PATH}")
     print(f"   classes={meta['classes']} real_idx={meta['real_idx']} T={meta['temperature']:.3f}")
     if "val_metrics" in ckpt:
         m = ckpt["val_metrics"]
@@ -100,9 +106,9 @@ if META["face_crop"]:
     try:
         from preprocess_faces import crop_face, load_detector
         DETECTOR = load_detector(None)
-        print(f"🧠 Face cropping ON (margin {META['face_margin']}) — matches training data.")
+        print(f"[FACE] Face cropping ON (margin {META['face_margin']}) - matches training data.")
     except Exception as e:
-        print(f"⚠️ Face detector disabled ({e})")
+        print(f"[WARN] Face detector disabled ({e})")
 
 def transform_img(pil_img: Image.Image) -> torch.Tensor:
     resized = pil_img.resize((META["img_size"], META["img_size"]), Image.BILINEAR)
@@ -119,10 +125,6 @@ MAX_BYTES = 50 * 1024 * 1024
 
 @torch.no_grad()
 def predict_tensor(tensor):
-    """Temperature-scaled probabilities, averaged with the horizontal flip.
-
-    Flip-TTA costs one extra forward pass and measurably steadies borderline scores.
-    """
     batch = torch.cat([tensor, torch.flip(tensor, dims=[3])]).to(device)
     logits = model(batch).float() / META["temperature"]
     return torch.softmax(logits, dim=1).mean(dim=0)
@@ -145,7 +147,6 @@ async def predict_media(file: UploadFile = File(...)):
     if is_audio:
         try:
             from preprocess_audio import generate_spectrogram_image
-            # Write temp audio file
             temp_path = f"_temp_{file.filename}"
             with open(temp_path, "wb") as f:
                 f.write(contents)
@@ -181,8 +182,7 @@ async def predict_media(file: UploadFile = File(...)):
     per_class = {name: round(float(p) * 100, 2) for name, p in zip(META["classes"], probs)}
     predicted_class = META["classes"][int(probs.argmax())]
     trust_score = int(round(real_prob * 100))
-    # Three bands, matching lib/verdict.ts. The middle band is where a calibrated model
-    # says "I am not sure" — surfacing that beats forcing a confident-looking binary.
+
     if trust_score >= 75:
         category = "genuine"
     elif trust_score >= 40:
@@ -205,5 +205,5 @@ async def predict_media(file: UploadFile = File(...)):
 
 
 if __name__ == "__main__":
-    print("🚀 VerifAI Inference Engine → http://localhost:8000")
+    print("[START] VerifAI Inference Engine -> http://localhost:8000")
     uvicorn.run(app, host="127.0.0.1", port=8000)
