@@ -49,5 +49,7 @@ venv/
 /data/
 /runs/
 *.pt
-*.onnx
+# binaries
+ngrok.exe
+ngrok.zip
 

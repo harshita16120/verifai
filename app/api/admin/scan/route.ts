@@ -131,6 +131,7 @@ export async function POST(req: NextRequest) {
         method: 'POST',
         headers: {
           'ngrok-skip-browser-warning': 'true',
+          'bypass-tunnel-reminder': 'true',
         },
         body: pyFormData,
         signal: AbortSignal.timeout(12000),
