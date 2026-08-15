@@ -52,4 +52,5 @@ venv/
 # binaries
 ngrok.exe
 ngrok.zip
+.ngrok.exe.old
 
