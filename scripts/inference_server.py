@@ -2,6 +2,7 @@ import io
 import os
 import sys
 
+import numpy as np
 import torch
 import torch.nn as nn
 import uvicorn
@@ -161,11 +162,15 @@ async def predict_media(file: UploadFile = File(...)):
 
     face_found = None
     if not is_audio and DETECTOR is not None:
-        cropped = crop_face(DETECTOR, image, META["face_margin"])
-        face_found = cropped is not None
-        if not face_found:
-            raise HTTPException(status_code=422, detail="No face detected; image model is face-only.")
-        image = cropped
+        try:
+            cropped = crop_face(DETECTOR, image, META["face_margin"])
+            if cropped is not None:
+                image = cropped
+                face_found = True
+            else:
+                face_found = False
+        except Exception:
+            face_found = False
 
     try:
         probs = predict_tensor(transform_img(image).unsqueeze(0))

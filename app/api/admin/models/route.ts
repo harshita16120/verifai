@@ -53,8 +53,9 @@ export async function GET(req: NextRequest) {
 
           if (ext === '.pth') {
             try {
-              const pyCmd = `python -c "import torch, json, sys; ckpt=torch.load(r'${fullPath}', map_location='cpu', weights_only=False); print(json.dumps({k: (v if not hasattr(v, 'tolist') else v.tolist()) for k,v in ckpt.items() if k != 'state_dict'}))"`;
-              const output = execSync(pyCmd, { timeout: 3000, encoding: 'utf-8' }).trim();
+              const pyCode = `import torch, json, sys; sys.stdout.reconfigure(encoding='utf-8') if hasattr(sys.stdout, 'reconfigure') else None; ckpt=torch.load(r'''${fullPath}''', map_location='cpu', weights_only=False); print(json.dumps({k: (v if not hasattr(v, 'tolist') else v.tolist()) for k,v in ckpt.items() if k != 'state_dict'}))`;
+              const { execFileSync } = require('child_process');
+              const output = execFileSync('python', ['-c', pyCode], { timeout: 4000, encoding: 'utf-8' }).trim();
               metadata = JSON.parse(output);
             } catch {
               metadata = { note: 'No metadata or python torch unavailable to inspect checkpoint' };
