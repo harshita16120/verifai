@@ -344,10 +344,10 @@ export default function AdminDashboardPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="md:col-span-1 glass-card p-6 rounded-2xl border border-ink-800 flex flex-col items-center justify-center">
-                    <ScoreRing score={scanResult.score} ringColor={scanResult.verdict.ringColor} glowColor={scanResult.verdict.glowColor} />
+                    <ScoreRing score={scanResult.score} />
                   </div>
                   <div className="md:col-span-2">
-                    <ReportPanel result={scanResult} />
+                    <ReportPanel result={scanResult} onReset={() => setScanResult(null)} />
                   </div>
                 </div>
               </div>

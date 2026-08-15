@@ -16,7 +16,15 @@ export async function POST(req: NextRequest) {
     const logPath = path.join(runDir, 'log.txt');
     const runJsonPath = path.join(runDir, 'run.json');
 
-    const runData = {
+    const runData: {
+      id: string;
+      scriptType: string;
+      status: string;
+      startTime: string;
+      endTime: string | null;
+      exitCode: number | null;
+      args: string[];
+    } = {
       id: runId,
       scriptType,
       status: 'running',
