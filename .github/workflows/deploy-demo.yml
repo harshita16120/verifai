@@ -1,0 +1,41 @@
+name: Deploy Demo Branch
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  verify-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Run Production Build
+        run: npm run build
+
+      - name: Fast-Forward Merge and Push to Demo Branch
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git fetch origin demo:demo || git branch demo
+          git checkout demo
+          git merge --ff-only main
+          git push origin demo
