@@ -317,6 +317,19 @@ export async function POST(req: NextRequest) {
       laymanSummary,
     };
 
+    // Optional LLM Layman Verdict Enhancement (Gated by GOOGLE_AI_API_KEY / OPENROUTER_API_KEY)
+    try {
+      const { generateAiLaymanExplanation } = await import('@/lib/models/external_ai');
+      const aiResponse = await generateAiLaymanExplanation(finalScore, category, reasons, fileType);
+      if (aiResponse) {
+        verdict.laymanSummary = aiResponse.summary;
+        verdict.description = aiResponse.summary;
+        reasons = aiResponse.reasons;
+      }
+    } catch {
+      // Continue with template explanations if AI key absent or request fails
+    }
+
     const scanId = `VRF-${Math.floor(100000 + Math.random() * 900000)}`;
     const hash = `0x${Array.from({ length: 16 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
 

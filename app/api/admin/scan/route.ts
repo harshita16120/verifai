@@ -161,6 +161,26 @@ export async function POST(req: NextRequest) {
       laymanSummary,
     };
 
+    let reasonsList = [
+      `Direct PyTorch EfficientNet Inference: Predicted '${pyInferenceResult.predictedClass}'.`,
+      `Real probability: ${pyInferenceResult.realProbability}% | Fake probability: ${pyInferenceResult.fakeProbability}%.`,
+      `Temperature calibration: ${pyInferenceResult.calibrated ? 'Applied' : 'Default (1.0)'}.`,
+      `Face cropped: ${pyInferenceResult.faceCropped ? 'Yes (MTCNN 35% margin)' : 'No / Full frame'}.`,
+    ];
+
+    // Optional LLM Layman Verdict Enhancement (Gated by GOOGLE_AI_API_KEY / OPENROUTER_API_KEY)
+    try {
+      const { generateAiLaymanExplanation } = await import('@/lib/models/external_ai');
+      const aiResponse = await generateAiLaymanExplanation(finalScore, category, reasonsList, fileType);
+      if (aiResponse) {
+        verdict.laymanSummary = aiResponse.summary;
+        verdict.description = aiResponse.summary;
+        reasonsList = aiResponse.reasons;
+      }
+    } catch {
+      // Continue with template explanations if AI key absent or request fails
+    }
+
     const scanId = `ADM-${Math.floor(100000 + Math.random() * 900000)}`;
 
     const responseData = {
@@ -170,12 +190,7 @@ export async function POST(req: NextRequest) {
       fileSize,
       score: finalScore,
       verdict,
-      reasons: [
-        `Direct PyTorch EfficientNet Inference: Predicted '${pyInferenceResult.predictedClass}'.`,
-        `Real probability: ${pyInferenceResult.realProbability}% | Fake probability: ${pyInferenceResult.fakeProbability}%.`,
-        `Temperature calibration: ${pyInferenceResult.calibrated ? 'Applied' : 'Default (1.0)'}.`,
-        `Face cropped: ${pyInferenceResult.faceCropped ? 'Yes (MTCNN 35% margin)' : 'No / Full frame'}.`,
-      ],
+      reasons: reasonsList,
       breakdown: {
         faceForgeryScore: Math.round(100 - pyInferenceResult.fakeProbability),
         frequencyGanScore: Math.round(pyInferenceResult.realProbability),
