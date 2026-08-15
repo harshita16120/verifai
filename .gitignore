@@ -45,3 +45,7 @@ venv/
 /models/
 /public/models/
 /data/
+/runs/
+*.pt
+*.onnx
+
