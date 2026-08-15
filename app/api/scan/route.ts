@@ -160,8 +160,11 @@ export async function POST(req: NextRequest) {
 
         const pyRes = await fetch(targetPredictEndpoint, {
           method: 'POST',
+          headers: {
+            'ngrok-skip-browser-warning': 'true',
+          },
           body: pyFormData,
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(10000),
         });
 
         if (pyRes.ok) {
