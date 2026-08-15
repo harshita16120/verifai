@@ -126,13 +126,16 @@ export async function POST(req: NextRequest) {
 
     // Check if trained PyTorch Inference Server (http://localhost:8000/predict) is running
     let pyInferenceResult = null;
+    const pythonServerBase = (process.env.PYTHON_SERVER_URL || 'http://localhost:8000').replace(/\/$/, '');
+    const targetPredictEndpoint = `${pythonServerBase}/predict`;
+
     if (fileBlob) {
       try {
         const pyFormData = new FormData();
         pyFormData.append('file', fileBlob, filename);
         pyFormData.append('fileType', fileType);
 
-        const pyRes = await fetch('http://localhost:8000/predict', {
+        const pyRes = await fetch(targetPredictEndpoint, {
           method: 'POST',
           body: pyFormData,
           signal: AbortSignal.timeout(8000),

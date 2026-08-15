@@ -92,7 +92,9 @@ export async function POST(req: NextRequest) {
 
     // Direct call to FastAPI inference server without heuristic fallback
     let pyInferenceResult = null;
-    let pyErrorDetail = 'Inference server (http://localhost:8000/predict) is offline or unresponsive.';
+    const pythonServerBase = (process.env.PYTHON_SERVER_URL || 'http://localhost:8000').replace(/\/$/, '');
+    const targetPredictEndpoint = `${pythonServerBase}/predict`;
+    let pyErrorDetail = `Inference server (${targetPredictEndpoint}) is offline or unresponsive.`;
     let pyStatus = 503;
 
     try {
@@ -100,7 +102,7 @@ export async function POST(req: NextRequest) {
       pyFormData.append('file', fileBlob, filename);
       pyFormData.append('fileType', fileType);
 
-      const pyRes = await fetch('http://localhost:8000/predict', {
+      const pyRes = await fetch(targetPredictEndpoint, {
         method: 'POST',
         body: pyFormData,
         signal: AbortSignal.timeout(10000),
