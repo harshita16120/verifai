@@ -6,6 +6,12 @@ import torch
 import torch.nn as nn
 from torchvision import models
 
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+    except Exception:
+        pass
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Export PyTorch Deepfake Detector checkpoint to ONNX format.")
     default_model = os.environ.get("VERIFAI_MODEL", "models/face/deepfake_detector_v2.pth")
